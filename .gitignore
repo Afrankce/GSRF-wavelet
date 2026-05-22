@@ -17,6 +17,11 @@ results/
 # Data and outputs
 data/
 logs/
+deepmimo_scenarios/
+
+# Local experiment backups
+*.bak_*
+login.sh
 
 # IDE
 .vscode/

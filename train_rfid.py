@@ -3,10 +3,12 @@ import os
 import sys
 import re
 import warnings
+import random
 from random import randint
 from argparse import ArgumentParser
 
 # third-party
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -17,6 +19,7 @@ from scene import Scene, GaussianModel
 from gaussian_renderer import render_rfid as render
 from utils.loss_utils import l1_loss, ssim, psnr, fourier_loss
 from utils.train_utils import training_report, prepare_output_and_logger
+from scene.triplane_initializer import run_triplane_init_warmup
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.models._utils")
 
@@ -50,6 +53,20 @@ def training(model_para_args,
                       gaussians,
                       load_iteration=extracted_number,
                       shuffle=True)
+
+    if not checkpoint:
+        run_triplane_init_warmup(scene,
+                                 gaussians,
+                                 model_para_args,
+                                 optimization_para_args,
+                                 pipeline_para_args,
+                                 render)
+        if getattr(model_para_args, "use_triplane_init", False) and getattr(model_para_args, "triplane_reset_seed_after_warmup", False):
+            random_seed = getattr(model_para_args, "random_seed", 8371)
+            random.seed(random_seed)
+            np.random.seed(random_seed)
+            torch.manual_seed(random_seed)
+            print("[TriPlane Init] reset RNG state before main GSRF training")
 
     gaussians.training_setup(optimization_para_args)
 
@@ -261,7 +278,10 @@ if __name__ == '__main__':
             file.write(f"{key}: {value}\n")
 
     # run training
-    training(model_para_cls.extract(args),
+    model_args = model_para_cls.extract(args)
+    model_args.random_seed = random_seed
+
+    training(model_args,
              optimization_para_cls.extract(args),
              pipeline_para_cls.extract(args),
              args.test_iterations,

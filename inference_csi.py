@@ -211,7 +211,7 @@ def main():
         model_args = model_cls.extract(base_args)
         model_args.model_path = ant_dir
         model_args.source_path = data_dir
-        model_args.num_channels_override = 52
+        model_args.num_channels_override = scene_info.n_subcarriers * 2
 
         pipe_args_ns = Namespace(**{k: getattr(base_args, k) for k in
                                     ['convert_SHs_python', 'compute_cov3D_python', 'debug', 'radius_rx']

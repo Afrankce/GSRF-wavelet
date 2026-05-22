@@ -37,7 +37,9 @@ def create_sphere_rays(n_azimuth, n_elevation, radius=0.5):
 
 def render_rfid(viewpoint,
            pc : GaussianModel,
-           pipe
+           pipe,
+           override_xyz=None,
+           override_attenuation=None
            ):
     scaling_modifier = 1.0
     radii_scale      = 3.0
@@ -45,9 +47,9 @@ def render_rfid(viewpoint,
     radius_rx = pipe.radius_rx
 
     # extract Gaussian properties
-    means_3d    = pc.get_xyz
+    means_3d    = pc.get_xyz if override_xyz is None else override_xyz
     fle_coeffs  = pc.get_features
-    attenuation = pc.get_attenuation
+    attenuation = pc.get_attenuation if override_attenuation is None else override_attenuation
 
     cov3d_precomp, actual_cov3d = pc.get_covariance(scaling_modifier)
 

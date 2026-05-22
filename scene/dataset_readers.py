@@ -43,7 +43,7 @@ def split_dataset_llffhold(datadir, train_path, test_path, ratio=0.8, seed=8371)
     llffhold_t = 8
 
     spectrum_dir = os.path.join(datadir, 'spectrum')
-    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png')])
+    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png') and not f.startswith('._')])
     image_names = [x.split('.')[0] for x in spt_names]
 
     len_image = len(image_names)
@@ -68,7 +68,7 @@ def split_dataset_llffhold(datadir, train_path, test_path, ratio=0.8, seed=8371)
 def split_dataset_random(datadir, train_path, test_path, ratio=0.8, seed=8371):
 
     spectrum_dir = os.path.join(datadir, 'spectrum')
-    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png')])
+    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png') and not f.startswith('._')])
     len_image = len(spt_names)
 
     random.seed(seed)
@@ -97,7 +97,7 @@ def readSpectrumImage(data_dir_path):
 
     gateway_pos_path = os.path.join(data_dir_path, 'gateway_info.yml')
     spectrum_dir     = os.path.join(data_dir_path, 'spectrum')
-    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png')])
+    spt_names = sorted([f for f in os.listdir(spectrum_dir) if f.endswith('.png') and not f.startswith('._')])
 
     with open(gateway_pos_path) as f_loader:
         gateway_info = yaml.safe_load(f_loader)

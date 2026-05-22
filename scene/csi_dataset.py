@@ -31,14 +31,21 @@ class CSISceneInfo(NamedTuple):
 
 
 # ---- CSI data loading and preprocessing ----
-def load_csi_data(data_dir, split_method='random', ratio_train=0.8, seed=8371):
+def load_csi_data(data_dir, split_method='random', ratio_train=0.7, seed=8371):
 
     csi_path = os.path.join(data_dir, 'csidata.npy')
     csi_raw = np.load(csi_path)
     num_samples = csi_raw.shape[0]
 
-    uplink = csi_raw[:, :, :26]
-    downlink = csi_raw[:, :, 26:]
+    if csi_raw.ndim != 3:
+        raise ValueError(f"Expected csidata.npy with shape [samples, antennas, subcarriers], got {csi_raw.shape}")
+    total_subcarriers = csi_raw.shape[2]
+    if total_subcarriers % 2 != 0:
+        raise ValueError(f"Expected an even number of subcarriers, got {total_subcarriers}")
+    n_subcarriers = total_subcarriers // 2
+
+    uplink = csi_raw[:, :, :n_subcarriers]
+    downlink = csi_raw[:, :, n_subcarriers:]
 
     up_re = np.real(uplink).astype(np.float32)
     up_im = np.imag(uplink).astype(np.float32)
@@ -97,8 +104,8 @@ def load_csi_data(data_dir, split_method='random', ratio_train=0.8, seed=8371):
 
     return CSISceneInfo(
         antenna_positions=antenna_positions,
-        n_antennas=8,
-        n_subcarriers=26,
+        n_antennas=int(csi_raw.shape[1]),
+        n_subcarriers=int(n_subcarriers),
         train_samples=train_samples,
         test_samples=test_samples,
         up_re_mean=float(up_re_mean),

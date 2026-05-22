@@ -28,11 +28,10 @@ from utils.fle_utils import _associated_legendre_batch, _build_norm_table
 
 
 def eval_fle_multi_channel(deg, coeffs, dirs):
-    """Evaluate FLE for multi-channel CSI (26 subcarriers x 2).
+    """Evaluate FLE for multi-channel CSI.
 
-    Unlike eval_fle() which handles 2 channels (single Re/Im pair),
-    this handles 52 channels with interleaved real/imaginary coefficients
-    per subcarrier using batched einsum.
+    Coefficients are interleaved real/imaginary channels per subcarrier, so
+    pc.num_channels must be 2 * n_subcarriers.
     """
     n_coeffs = (deg + 1) ** 2
 
@@ -117,7 +116,7 @@ def render_csi(viewpoint, pc, pipe, n_azimuth=36, n_elevation=9):
     dir_pp_normalized = dir_pp / dir_pp.norm(dim=1, keepdim=True).clamp(min=1e-6)
 
     sig_re, sig_im = eval_fle_multi_channel(pc.active_fle_degree, fle_view, dir_pp_normalized)
-    stacked_signal = torch.stack([sig_re, sig_im], dim=2).reshape(-1, 52)
+    stacked_signal = torch.stack([sig_re, sig_im], dim=2).reshape(-1, pc.num_channels)
 
     radii = calculate_gaussian_radii(actual_cov3d, scale=radii_scale)
 

@@ -48,6 +48,14 @@ def compute_lpips_value(pred_tensor, gt_tensor, lpips_fn):
     return val.item()
 
 
+def build_lpips_fn():
+    try:
+        return lpips.LPIPS(net='alex').cuda().eval()
+    except Exception as exc:
+        print(f"[Warning] LPIPS unavailable; skipping LPIPS metric. Reason: {exc}")
+        return None
+
+
 # ---- inference ----
 
 def testing(model_para_args,
@@ -75,7 +83,7 @@ def testing(model_para_args,
     os.makedirs(render_dir, exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
 
-    lpips_fn = lpips.LPIPS(net='alex').cuda()
+    lpips_fn = build_lpips_fn()
 
     psnr_list = []
     mse_list = []
@@ -102,12 +110,13 @@ def testing(model_para_args,
         psnr_val = compute_psnr(pred_np, gt_np)
         mse_val = compute_mse(pred_np, gt_np)
         ssim_val = compute_ssim(pred_np, gt_np)
-        lpips_val = compute_lpips_value(spectrum.detach(), gt_spectrum, lpips_fn)
+        if lpips_fn is not None:
+            lpips_val = compute_lpips_value(spectrum.detach(), gt_spectrum, lpips_fn)
+            lpips_list.append(lpips_val)
 
         psnr_list.append(psnr_val)
         mse_list.append(mse_val)
         ssim_list.append(ssim_val)
-        lpips_list.append(lpips_val)
         names_list.append(spec_name)
 
         if step_idx % 50 == 0 or step_idx == len(viewpoint_stack) - 1:
@@ -117,7 +126,7 @@ def testing(model_para_args,
     psnr_arr = np.array(psnr_list)
     mse_arr = np.array(mse_list)
     ssim_arr = np.array(ssim_list)
-    lpips_arr = np.array(lpips_list)
+    lpips_arr = np.array(lpips_list) if lpips_list else None
 
     # save per-sample CSV
     csv_dir = os.path.join(output_dir, "csv")
@@ -127,8 +136,9 @@ def testing(model_para_args,
         'psnr':       ('PSNR_dB',       psnr_arr),
         'mse':        ('MSE',           mse_arr),
         'ssim':       ('SSIM',          ssim_arr),
-        'lpips':      ('LPIPS',         lpips_arr),
     }
+    if lpips_arr is not None:
+        metrics_data['lpips'] = ('LPIPS', lpips_arr)
 
     for key, (col_name, arr) in metrics_data.items():
         csv_path = os.path.join(csv_dir, f"{key}.csv")
@@ -152,15 +162,18 @@ def testing(model_para_args,
             "max":    round(float(arr.max()), 6),
         }
 
+    summary_metrics = {
+        "PSNR_dB":      make_stats(psnr_arr),
+        "MSE":          make_stats(mse_arr),
+        "SSIM":         make_stats(ssim_arr),
+    }
+    if lpips_arr is not None:
+        summary_metrics["LPIPS"] = make_stats(lpips_arr)
+
     summary = {
         "checkpoint": checkpointpath_inference,
         "num_test_samples": len(psnr_arr),
-        "metrics": {
-            "PSNR_dB":      make_stats(psnr_arr),
-            "MSE":          make_stats(mse_arr),
-            "SSIM":         make_stats(ssim_arr),
-            "LPIPS":        make_stats(lpips_arr),
-        }
+        "metrics": summary_metrics
     }
 
     json_path = os.path.join(output_dir, "summary.json")
@@ -174,7 +187,10 @@ def testing(model_para_args,
     print(f"  PSNR:   {psnr_arr.mean():.4f} +/- {psnr_arr.std():.4f} dB")
     print(f"  MSE:    {mse_arr.mean():.6f} +/- {mse_arr.std():.6f}")
     print(f"  SSIM:   {ssim_arr.mean():.4f} +/- {ssim_arr.std():.4f}")
-    print(f"  LPIPS:  {lpips_arr.mean():.4f} +/- {lpips_arr.std():.4f}")
+    if lpips_arr is not None:
+        print(f"  LPIPS:  {lpips_arr.mean():.4f} +/- {lpips_arr.std():.4f}")
+    else:
+        print("  LPIPS:  skipped")
     print(f"{'='*60}")
     print(f"  Results saved to: {output_dir}")
     print(f"{'='*60}\n")
@@ -183,12 +199,14 @@ def testing(model_para_args,
     plot_metric_bar(psnr_arr, 'PSNR (dB)', os.path.join(plot_dir, 'psnr_bar.png'))
     plot_metric_bar(mse_arr, 'MSE', os.path.join(plot_dir, 'mse_bar.png'))
     plot_metric_bar(ssim_arr, 'SSIM', os.path.join(plot_dir, 'ssim_bar.png'))
-    plot_metric_bar(lpips_arr, 'LPIPS', os.path.join(plot_dir, 'lpips_bar.png'))
+    if lpips_arr is not None:
+        plot_metric_bar(lpips_arr, 'LPIPS', os.path.join(plot_dir, 'lpips_bar.png'))
 
     plot_metric_cdf(psnr_arr, 'PSNR (dB)', os.path.join(plot_dir, 'psnr_cdf.png'))
     plot_metric_cdf(mse_arr, 'MSE', os.path.join(plot_dir, 'mse_cdf.png'))
     plot_metric_cdf(ssim_arr, 'SSIM', os.path.join(plot_dir, 'ssim_cdf.png'))
-    plot_metric_cdf(lpips_arr, 'LPIPS', os.path.join(plot_dir, 'lpips_cdf.png'))
+    if lpips_arr is not None:
+        plot_metric_cdf(lpips_arr, 'LPIPS', os.path.join(plot_dir, 'lpips_cdf.png'))
 
     print(f"  Plots saved to: {plot_dir}\n")
 

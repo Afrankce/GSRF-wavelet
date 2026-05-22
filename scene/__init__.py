@@ -35,10 +35,13 @@ class Scene:
             print("\nLoading saved point cloud data at iteration {}\n".format(self.loaded_iter))
 
         # select dataset reader based on type
+        # allow dataset values like "csi/csi-dataset-1" while still routing
+        # to the CSI reader.
         dataset = getattr(args, 'dataset', 'rfid')
-        if dataset == 'ble_rssi':
+        dataset_key = str(dataset).lower()
+        if dataset_key == 'ble_rssi' or dataset_key.startswith('ble_rssi/'):
             scene_info = readBLESceneInfo(args)
-        elif dataset == 'csi':
+        elif dataset_key == 'csi' or dataset_key.startswith('csi/'):
             scene_info = readCSISceneInfo(args)
         else:
             scene_info = readRFSceneInfo(args)

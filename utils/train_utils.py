@@ -149,12 +149,30 @@ def setup_fle_only_optimizer(gaussians, opt_args):
 
 
 def init_gaussians_from_reference(gaussians, ref_gaussians, args):
-    """Copy frozen geometry from reference Gaussians, reinitialize FLE coefficients."""
-    gaussians._xyz = nn.Parameter(ref_gaussians._xyz.clone(), requires_grad=False)
-    gaussians._scaling = nn.Parameter(ref_gaussians._scaling.clone(), requires_grad=False)
-    gaussians._rotation = nn.Parameter(ref_gaussians._rotation.clone(), requires_grad=False)
-    gaussians._attenuation = nn.Parameter(ref_gaussians._attenuation.clone(), requires_grad=False)
-    gaussians.spatial_lr_scale = ref_gaussians.spatial_lr_scale
+    """Copy frozen geometry from reference Gaussians, reinitialize FLE coefficients.
+
+    ref_gaussians can be either:
+    - a GaussianModel instance (legacy behavior)
+    - a CPU geometry dict with keys: xyz, scaling, rotation, attenuation, spatial_lr_scale
+    """
+    if isinstance(ref_gaussians, dict):
+        xyz = ref_gaussians['xyz'].to(device="cuda", non_blocking=True)
+        scaling = ref_gaussians['scaling'].to(device="cuda", non_blocking=True)
+        rotation = ref_gaussians['rotation'].to(device="cuda", non_blocking=True)
+        attenuation = ref_gaussians['attenuation'].to(device="cuda", non_blocking=True)
+        spatial_lr_scale = float(ref_gaussians['spatial_lr_scale'])
+    else:
+        xyz = ref_gaussians._xyz.clone()
+        scaling = ref_gaussians._scaling.clone()
+        rotation = ref_gaussians._rotation.clone()
+        attenuation = ref_gaussians._attenuation.clone()
+        spatial_lr_scale = ref_gaussians.spatial_lr_scale
+
+    gaussians._xyz = nn.Parameter(xyz, requires_grad=False)
+    gaussians._scaling = nn.Parameter(scaling, requires_grad=False)
+    gaussians._rotation = nn.Parameter(rotation, requires_grad=False)
+    gaussians._attenuation = nn.Parameter(attenuation, requires_grad=False)
+    gaussians.spatial_lr_scale = spatial_lr_scale
 
     fle_init_scale = getattr(args, '_fle_init_scale', 0.1)
     n_points = gaussians._xyz.shape[0]
