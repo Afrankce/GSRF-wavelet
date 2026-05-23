@@ -22,6 +22,7 @@ from utils.general_utils import safe_state
 from scene import Scene, GaussianModel
 from gaussian_renderer import render_rfid as render
 from utils.data_painter import paint_spectrum, plot_metric_bar, plot_metric_cdf
+from scene.triplane_initializer import load_persistent_triplane_runtime, render_with_persistent_triplane
 
 
 # ---- metrics ----
@@ -78,6 +79,25 @@ def testing(model_para_args,
         (model_params, first_iter) = torch.load(checkpointpath_inference)
         gaussians.restore(model_params, optimization_para_args)
 
+    triplane_runtime = None
+    if getattr(model_para_args, "triplane_persistent_modulation", False):
+        tri_state_path = os.path.join(
+            model_para_args.model_path,
+            f"triplane_persistent_{extracted_number}.pth",
+        )
+        if os.path.exists(tri_state_path):
+            triplane_runtime = load_persistent_triplane_runtime(
+                scene,
+                gaussians,
+                model_para_args,
+                tri_state_path,
+            )
+            if triplane_runtime is not None:
+                triplane_runtime["model"].eval()
+                print(f"[TriPlane Persistent] loaded: {tri_state_path}")
+        else:
+            print(f"[Warning] triplane_persistent_modulation is enabled but state file is missing: {tri_state_path}")
+
     render_dir = os.path.join(output_dir, "rendered")
     plot_dir = os.path.join(output_dir, "plots")
     os.makedirs(render_dir, exist_ok=True)
@@ -96,7 +116,13 @@ def testing(model_para_args,
     # run inference on test set
     for step_idx, viewpoint_cam in enumerate(tqdm(viewpoint_stack, desc="Inference")):
 
-        render_pkg = render(viewpoint_cam, gaussians, pipeline_para_args)
+        render_pkg = render_with_persistent_triplane(
+            viewpoint_cam,
+            gaussians,
+            pipeline_para_args,
+            render,
+            triplane_runtime,
+        )
 
         spectrum = render_pkg["render"]
 

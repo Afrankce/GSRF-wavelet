@@ -8,10 +8,14 @@ SPARSE_RATIO="${SPARSE_RATIO:-0.03593}"  # 6123 * 0.03593 ~= 220 RFID training s
 SEED="${SEED:-8371}"
 ITER_7K="${ITER_7K:-7000}"
 ITER_SHORT="${ITER_SHORT:-10000}"
+ITER_20K="${ITER_20K:-20000}"
 ITER_FULL="${ITER_FULL:-30000}"
+V1_WARMUP="${V1_WARMUP:-3000}"
+V2_WARMUP="${V2_WARMUP:-2000}"
 
 BASE_CFG="arguments/configs/rfid/exp1.yaml"
 TRI_CFG="arguments/configs/rfid/exp_triplane.yaml"
+TGS_CFG="arguments/configs/rfid/exp_tgsrf.yaml"
 RUN_LOG_DIR="logs/rfid_experiment_runs"
 
 ACTIVE_RATIO="${DEFAULT_RATIO}"
@@ -75,6 +79,70 @@ use_sparse220_split() {
     ACTIVE_RATIO="${SPARSE_RATIO}"
     ACTIVE_TRAIN_INDEX="train_index_sparse220_seed${SEED}.txt"
     ACTIVE_TEST_INDEX="test_index_sparse220_seed${SEED}.txt"
+}
+
+use_20p_split() {
+    ACTIVE_RATIO="0.2"
+    ACTIVE_TRAIN_INDEX="train_index_20p_seed${SEED}.txt"
+    ACTIVE_TEST_INDEX="test_index_20p_seed${SEED}.txt"
+}
+
+run_v1_multiparam_20p20k() {
+    local exp_name="$1"
+    shift
+    use_20p_split
+    run_train_and_infer "${TRI_CFG}" "${exp_name}" "${ITER_20K}" \
+        --triplane_output_mode multi_param \
+        --triplane_decoder_type film_fourier_multihead \
+        --triplane_field_type bior4.4 \
+        --triplane_wavelet_levels 2 \
+        --triplane_wavelet_l1 0.001 \
+        --triplane_wavelet_c2f \
+        --triplane_hidden_dim 128 \
+        --triplane_fourier_freqs 4 \
+        --triplane_film_layers 3 \
+        --triplane_warmup_iters "${V1_WARMUP}" \
+        --triplane_offset_radius_scale 0.05 \
+        --triplane_offset_l2 0.005 \
+        --triplane_att_radius 0.03 \
+        --triplane_att_l2 0.05 \
+        --triplane_scale_radius 0.15 \
+        --triplane_scale_l2 0.01 \
+        --triplane_rotation_radius 0.05 \
+        --triplane_rotation_l2 0.01 \
+        --triplane_feature_radius 0.1 \
+        --triplane_feature_l2 0.01 \
+        --triplane_finalize_tx_samples 32 \
+        "$@"
+}
+
+triplane_v1_base_20p20k() {
+    run_v1_multiparam_20p20k "triplane_v1_base_20p_20k" \
+        --triplane_feature_mode scalar
+}
+
+triplane_v1_rot_20p20k() {
+    run_v1_multiparam_20p20k "triplane_v1_rot_20p_20k" \
+        --triplane_feature_mode scalar \
+        --triplane_predict_rotation
+}
+
+triplane_v1_fle_degree_20p20k() {
+    run_v1_multiparam_20p20k "triplane_v1_fle_degree_20p_20k" \
+        --triplane_feature_mode degree
+}
+
+triplane_v1_full_20p20k() {
+    run_v1_multiparam_20p20k "triplane_v1_full_20p_20k" \
+        --triplane_feature_mode degree \
+        --triplane_predict_rotation
+}
+
+triplane_v1_ablation_20p20k() {
+    triplane_v1_base_20p20k
+    triplane_v1_rot_20p20k
+    triplane_v1_fle_degree_20p20k
+    triplane_v1_full_20p20k
 }
 
 main_default7k() {
@@ -278,6 +346,72 @@ offset_ablation7k() {
     done
 }
 
+tgsrf_direct_20p20k() {
+    use_20p_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_direct_20p_20k" "${ITER_20K}" \
+        --tgsrf_triplane_type direct \
+        --tgsrf_warmup_iters "${V1_WARMUP}"
+}
+
+tgsrf_haar_20p20k() {
+    use_20p_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_haar_20p_20k" "${ITER_20K}" \
+        --tgsrf_triplane_type haar \
+        --tgsrf_wavelet_l1 0.001 \
+        --tgsrf_wavelet_c2f \
+        --tgsrf_warmup_iters "${V1_WARMUP}"
+}
+
+tgsrf_direct_default30k() {
+    use_default_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_direct_default_30k" "${ITER_FULL}" \
+        --tgsrf_triplane_type direct \
+        --tgsrf_warmup_iters "${V1_WARMUP}"
+}
+
+tgsrf_haar_default30k() {
+    use_default_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_haar_default_30k" "${ITER_FULL}" \
+        --tgsrf_triplane_type haar \
+        --tgsrf_wavelet_l1 0.001 \
+        --tgsrf_wavelet_c2f \
+        --tgsrf_warmup_iters "${V1_WARMUP}"
+}
+
+tgsrf_ablation_20p20k() {
+    tgsrf_direct_20p20k
+    tgsrf_haar_20p20k
+}
+
+tgsrf_v2_direct_dense30k() {
+    use_default_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_v2_direct_dense_30k" "${ITER_FULL}" \
+        --tgsrf_mode refine \
+        --tgsrf_triplane_type direct \
+        --tgsrf_warmup_iters "${V2_WARMUP}" \
+        --tgsrf_gaussian_offset_radius 0.05 \
+        --tgsrf_gaussian_offset_start "$((V2_WARMUP / 2))" \
+        --tgsrf_point_refine_start 999999
+}
+
+tgsrf_v2_haar_dense30k() {
+    use_default_split
+    run_train_and_infer "${TGS_CFG}" "tgsrf_v2_haar_dense_30k" "${ITER_FULL}" \
+        --tgsrf_mode refine \
+        --tgsrf_triplane_type haar \
+        --tgsrf_wavelet_l1 0.001 \
+        --tgsrf_wavelet_c2f \
+        --tgsrf_warmup_iters "${V2_WARMUP}" \
+        --tgsrf_gaussian_offset_radius 0.05 \
+        --tgsrf_gaussian_offset_start "$((V2_WARMUP / 2))" \
+        --tgsrf_point_refine_start 999999
+}
+
+tgsrf_v2_dense30k() {
+    tgsrf_v2_direct_dense30k
+    tgsrf_v2_haar_dense30k
+}
+
 final_default30k() {
     use_default_split
     run_train_and_infer "${BASE_CFG}" "baseline_default_30k" "${ITER_FULL}"
@@ -335,6 +469,21 @@ case "${1:-main_default7k}" in
     main_sparse7k)
         main_sparse7k
         ;;
+    triplane_v1_base_20p20k)
+        triplane_v1_base_20p20k
+        ;;
+    triplane_v1_rot_20p20k)
+        triplane_v1_rot_20p20k
+        ;;
+    triplane_v1_fle_degree_20p20k)
+        triplane_v1_fle_degree_20p20k
+        ;;
+    triplane_v1_full_20p20k)
+        triplane_v1_full_20p20k
+        ;;
+    triplane_v1_ablation_20p20k)
+        triplane_v1_ablation_20p20k
+        ;;
     warmup_ablation7k)
         warmup_ablation7k
         ;;
@@ -350,6 +499,30 @@ case "${1:-main_default7k}" in
     final_sparse30k)
         final_sparse30k
         ;;
+    tgsrf_direct_20p20k)
+        tgsrf_direct_20p20k
+        ;;
+    tgsrf_haar_20p20k)
+        tgsrf_haar_20p20k
+        ;;
+    tgsrf_ablation_20p20k)
+        tgsrf_ablation_20p20k
+        ;;
+    tgsrf_direct_default30k)
+        tgsrf_direct_default30k
+        ;;
+    tgsrf_haar_default30k)
+        tgsrf_haar_default30k
+        ;;
+    tgsrf_v2_direct_dense30k)
+        tgsrf_v2_direct_dense30k
+        ;;
+    tgsrf_v2_haar_dense30k)
+        tgsrf_v2_haar_dense30k
+        ;;
+    tgsrf_v2_dense30k)
+        tgsrf_v2_dense30k
+        ;;
     all7k)
         main_default7k
         warmup_ablation7k
@@ -357,7 +530,7 @@ case "${1:-main_default7k}" in
         offset_ablation7k
         ;;
     *)
-        echo "Usage: $0 {main_default7k|main_default10k|triplane_default7k|triplane_safe7k|triplane_film7k|triplane_null7k|triplane_safe10k|triplane_film10k|triplane_gate10k|triplane_gate_mlp10k|triplane_gate_haar10k|triplane_gate_haar30k|triplane_null10k|main_sparse7k|warmup_ablation7k|resolution_ablation7k|offset_ablation7k|final_default30k|final_sparse30k|all7k}"
+        echo "Usage: $0 {main_default7k|main_default10k|triplane_default7k|triplane_safe7k|triplane_film7k|triplane_null7k|triplane_safe10k|triplane_film10k|triplane_gate10k|triplane_gate_mlp10k|triplane_gate_haar10k|triplane_gate_haar30k|triplane_null10k|main_sparse7k|triplane_v1_base_20p20k|triplane_v1_rot_20p20k|triplane_v1_fle_degree_20p20k|triplane_v1_full_20p20k|triplane_v1_ablation_20p20k|tgsrf_direct_20p20k|tgsrf_haar_20p20k|tgsrf_ablation_20p20k|tgsrf_direct_default30k|tgsrf_haar_default30k|tgsrf_v2_direct_dense30k|tgsrf_v2_haar_dense30k|tgsrf_v2_dense30k|warmup_ablation7k|resolution_ablation7k|offset_ablation7k|final_default30k|final_sparse30k|all7k}"
         exit 2
         ;;
 esac

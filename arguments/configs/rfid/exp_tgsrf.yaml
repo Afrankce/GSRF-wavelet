@@ -1,0 +1,122 @@
+# RFID spectrum dataset with TGS-RF Gaussian initialization.
+# This config keeps the legacy triplane initializer disabled and routes
+# initialization through scene/tgsrf/.
+
+exp_name: "exp_tgsrf"
+random_seed: 8371
+
+model:
+  dataset: "rfid"
+  frequency: 915.0e6
+  fle_degree: 9
+  data_device: "cuda:0"
+  n_azimuth: 360
+  n_elevation: 90
+  white_background: false
+  eval: true
+
+  # train/test split
+  llffhold: 8
+  llffhold_flag: false
+  ratio_train: 0.8
+  split_method: "random"
+  train_index_path: "train_index.txt"
+  test_index_path: "test_index.txt"
+
+  # legacy point cloud loader still creates a temporary GaussianModel, but
+  # TGS-RF materializes its own non-grid RF ray anchors before optimizer setup.
+  gene_init_point: false
+  camera_scale: 2.720
+  voxel_size_scale: 1.846
+  max_init_points: 50000
+
+  # FLE settings
+  _fle_init_scale: 0.0928
+  _fle_degree_ramp: 100
+
+  # Disable legacy TriPlane warmup/persistent modulation.
+  use_triplane_init: false
+  triplane_persistent_modulation: false
+
+  # TGS-RF V2 default: keep the baseline GSRF Gaussian grid and refine it with
+  # NeRF2-style RF geometry, spectrum tokens and TGS-style triplane features.
+  use_tgsrf_initializer: true
+  tgsrf_mode: "refine"              # refine | generate
+  tgsrf_warmup_iters: 3000
+  tgsrf_num_points: 50000
+  tgsrf_seed_views: 32
+  tgsrf_samples_per_ray: 8
+  tgsrf_ray_origin: "tx"             # matches current render_rfid sphere center
+  tgsrf_min_depth: 0.05
+  tgsrf_ray_seed_fraction: 0.45
+  tgsrf_path_seed_fraction: 0.25
+  tgsrf_path_jitter_scale: 0.05
+  tgsrf_bbox_pad_scale: 0.02
+
+  tgsrf_hidden_dim: 128
+  tgsrf_transformer_heads: 4
+  tgsrf_point_layers: 2
+  tgsrf_spectrum_patch_stride: 8
+  tgsrf_txrx_freqs: 4
+  tgsrf_geometry_freqs: 4
+
+  tgsrf_triplane_resolution: 128
+  tgsrf_triplane_channels: 32
+  tgsrf_triplane_type: "direct"      # direct | haar | bior44
+  tgsrf_wavelet_levels: 2
+  tgsrf_wavelet_high_init: 0.0
+  tgsrf_wavelet_l1: 0.0
+  tgsrf_wavelet_c2f: false
+
+  tgsrf_lr: 0.0002
+  tgsrf_grad_clip: 1.0
+  tgsrf_train_base_attrs: false
+  tgsrf_refine_features: false
+  tgsrf_point_refine_start: 999999
+  tgsrf_gaussian_offset_start: 1500
+  tgsrf_init_attenuation: 0.08
+  tgsrf_init_scale: 0.0              # 0 means KNN spacing, matching baseline Gaussian scale init
+  tgsrf_fle_init_scale: 0.0928
+  tgsrf_point_offset_radius: 0.25
+  tgsrf_gaussian_offset_radius: 0.05
+  tgsrf_att_radius: 0.05
+  tgsrf_scale_radius: 0.10
+  tgsrf_point_offset_l2: 0.02
+  tgsrf_gaussian_offset_l2: 0.02
+  tgsrf_att_l2: 0.02
+  tgsrf_scale_l2: 0.01
+  tgsrf_finalize_views: 16
+
+optimization:
+  iterations: 30000
+
+  # learning rates
+  position_lr_init: 0.0001605
+  position_lr_final: 1.18e-07
+  position_lr_delay_mult: 0.00264
+  feature_lr: 0.002742
+  opacity_lr: 0.01149
+  scaling_lr: 0.001376
+  rotation_lr: 0.001064
+
+  # loss weights
+  lambda_dssim: 0.366
+  lambda_dfourier: 0.1915
+
+  # densification and pruning
+  percent_dense: 0.006218
+  densification_interval: 250
+  opacity_reset_interval: 3500
+  densify_from_iter: 300
+  densify_grad_threshold: 0.000323
+  min_attenuation_threshold: 0.005347
+  raddi_size_threshold: 5.638
+
+  _rest_lr_ratio: 0.1927
+  random_background: false
+
+pipeline:
+  convert_SHs_python: true
+  compute_cov3D_python: true
+  debug: false
+  radius_rx: 0.307

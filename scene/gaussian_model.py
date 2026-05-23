@@ -135,7 +135,7 @@ class GaussianModel:
         self.max_radii2D    = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
 
-    def apply_initial_xyz_attenuation(self, xyz, attenuation_raw=None):
+    def apply_initial_xyz_attenuation(self, xyz, attenuation_raw=None, scaling_raw=None, rotation_raw=None, features=None):
         """Materialize an external initializer before optimizer setup."""
         if self.optimizer is not None:
             raise RuntimeError("apply_initial_xyz_attenuation must run before training_setup.")
@@ -145,6 +145,25 @@ class GaussianModel:
         if attenuation_raw is not None:
             self._attenuation = nn.Parameter(
                 attenuation_raw.detach().contiguous().requires_grad_(True)
+            )
+
+        if scaling_raw is not None:
+            self._scaling = nn.Parameter(
+                scaling_raw.detach().contiguous().requires_grad_(True)
+            )
+
+        if rotation_raw is not None:
+            self._rotation = nn.Parameter(
+                rotation_raw.detach().contiguous().requires_grad_(True)
+            )
+
+        if features is not None:
+            features = features.detach().contiguous()
+            self._features_dc = nn.Parameter(
+                features[:, 0:1, :].contiguous().requires_grad_(True)
+            )
+            self._features_rest = nn.Parameter(
+                features[:, 1:, :].contiguous().requires_grad_(True)
             )
 
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device=self._xyz.device)

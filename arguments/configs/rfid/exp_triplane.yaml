@@ -43,8 +43,10 @@ model:
   triplane_wavelet_l1: 0.0            # L1 on LH/HL/HH wavelet coefficients
   triplane_wavelet_c2f: false         # coarse-to-fine activation of Haar high bands
   triplane_hidden_dim: 128
-  triplane_decoder_type: "film_fourier"
+  triplane_decoder_type: "film_fourier"  # film_fourier | film_fourier_multihead | mlp
   triplane_output_mode: "offset_att"
+  triplane_candidate_pattern: "axis7"     # used when triplane_output_mode is candidate_score: axis7 | cube27
+  triplane_candidate_temperature: 1.0
   triplane_fourier_freqs: 4
   triplane_film_layers: 3
   triplane_lr: 0.001
@@ -52,10 +54,22 @@ model:
   triplane_offset_l2: 0.05
   triplane_att_radius: 0.1
   triplane_att_l2: 0.01
+  triplane_scale_radius: 0.1
+  triplane_scale_l2: 0.01
+  triplane_predict_rotation: false
+  triplane_rotation_radius: 0.05
+  triplane_rotation_l2: 0.01
+  triplane_feature_mode: "scalar"       # none | scalar | degree
+  triplane_feature_radius: 0.1
+  triplane_feature_l2: 0.01
   triplane_update_gaussian_attrs: false
   triplane_use_view_tx: true
   triplane_finalize_tx_samples: 32
   triplane_reset_seed_after_warmup: true
+  triplane_persistent_modulation: false  # keep the triplane gate active during main training/rendering
+  triplane_persistent_lr: 0.0001
+  triplane_persistent_att_l2: 0.02
+  triplane_persistent_wavelet_l1: 0.0
 
 optimization:
   iterations: 30000

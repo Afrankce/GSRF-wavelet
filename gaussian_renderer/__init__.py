@@ -39,7 +39,10 @@ def render_rfid(viewpoint,
            pc : GaussianModel,
            pipe,
            override_xyz=None,
-           override_attenuation=None
+           override_attenuation=None,
+           override_scaling=None,
+           override_features=None,
+           override_rotation=None
            ):
     scaling_modifier = 1.0
     radii_scale      = 3.0
@@ -48,10 +51,17 @@ def render_rfid(viewpoint,
 
     # extract Gaussian properties
     means_3d    = pc.get_xyz if override_xyz is None else override_xyz
-    fle_coeffs  = pc.get_features
+    fle_coeffs  = pc.get_features if override_features is None else override_features
     attenuation = pc.get_attenuation if override_attenuation is None else override_attenuation
 
-    cov3d_precomp, actual_cov3d = pc.get_covariance(scaling_modifier)
+    if override_scaling is None and override_rotation is None:
+        cov3d_precomp, actual_cov3d = pc.get_covariance(scaling_modifier)
+    else:
+        cov3d_precomp, actual_cov3d = pc.covariance_activation(
+            pc.get_scaling if override_scaling is None else override_scaling,
+            scaling_modifier,
+            pc._rotation if override_rotation is None else override_rotation,
+        )
 
     # TX/RX positions
     tvec_sphere_center = viewpoint.T_tx.to(means_3d.device, dtype=means_3d.dtype)

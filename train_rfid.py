@@ -19,7 +19,12 @@ from scene import Scene, GaussianModel
 from gaussian_renderer import render_rfid as render
 from utils.loss_utils import l1_loss, ssim, psnr, fourier_loss
 from utils.train_utils import training_report, prepare_output_and_logger
-from scene.triplane_initializer import run_triplane_init_warmup
+from scene.triplane_initializer import (
+    make_persistent_triplane_runtime,
+    render_with_persistent_triplane,
+    run_triplane_init_warmup,
+)
+from scene.tgsrf import run_tgsrf_init_warmup
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.models._utils")
 
@@ -54,13 +59,22 @@ def training(model_para_args,
                       load_iteration=extracted_number,
                       shuffle=True)
 
+    triplane_init_model = None
     if not checkpoint:
-        run_triplane_init_warmup(scene,
-                                 gaussians,
-                                 model_para_args,
-                                 optimization_para_args,
-                                 pipeline_para_args,
-                                 render)
+        if getattr(model_para_args, "use_tgsrf_initializer", False):
+            run_tgsrf_init_warmup(scene,
+                                  gaussians,
+                                  model_para_args,
+                                  optimization_para_args,
+                                  pipeline_para_args,
+                                  render)
+        else:
+            triplane_init_model = run_triplane_init_warmup(scene,
+                                                           gaussians,
+                                                           model_para_args,
+                                                           optimization_para_args,
+                                                           pipeline_para_args,
+                                                           render)
         if getattr(model_para_args, "use_triplane_init", False) and getattr(model_para_args, "triplane_reset_seed_after_warmup", False):
             random_seed = getattr(model_para_args, "random_seed", 8371)
             random.seed(random_seed)
@@ -69,6 +83,22 @@ def training(model_para_args,
             print("[TriPlane Init] reset RNG state before main GSRF training")
 
     gaussians.training_setup(optimization_para_args)
+    triplane_runtime = make_persistent_triplane_runtime(triplane_init_model, scene, gaussians, model_para_args)
+    triplane_optimizer = None
+    if triplane_runtime is not None:
+        persistent_lr = float(getattr(model_para_args, "triplane_persistent_lr", getattr(model_para_args, "triplane_lr", 1.0e-3)))
+        triplane_optimizer = torch.optim.Adam(triplane_runtime["model"].parameters(), lr=persistent_lr, eps=1e-15)
+        print(
+            "[TriPlane Persistent] enabled lr={} att_l2={} wavelet_l1={} view_tx={}".format(
+                persistent_lr,
+                triplane_runtime["lambda_att"],
+                triplane_runtime["lambda_wavelet"],
+                triplane_runtime["use_view_tx"],
+            )
+        )
+
+    def render_for_report(viewpoint, pc, pipe):
+        return render_with_persistent_triplane(viewpoint, pc, pipe, render, triplane_runtime)
 
     # restore from checkpoint
     if checkpoint:
@@ -105,7 +135,14 @@ def training(model_para_args,
             pipeline_para_args.debug = True
 
         # forward pass
-        render_pkg = render(viewpoint_cam, gaussians, pipeline_para_args)
+        render_pkg, triplane_regs = render_with_persistent_triplane(
+            viewpoint_cam,
+            gaussians,
+            pipeline_para_args,
+            render,
+            triplane_runtime,
+            return_regularizers=True,
+        )
 
         spectrum, visibility_filter, radii = \
             render_pkg["render"], render_pkg["visibility_filter"], render_pkg["radii"]
@@ -127,7 +164,13 @@ def training(model_para_args,
         loss = (1.0 - lambda_ssim - lambda_fourier) * Ll1 \
             + lambda_ssim * ssim_loss \
             + lambda_fourier * Lfourier
+        if triplane_runtime is not None:
+            loss = loss \
+                + triplane_runtime["lambda_att"] * triplane_regs["att_reg"] \
+                + triplane_runtime["lambda_wavelet"] * triplane_regs["wavelet_reg"]
 
+        if triplane_optimizer is not None:
+            triplane_optimizer.zero_grad(set_to_none=True)
         loss.backward()
 
         iter_end.record()
@@ -151,7 +194,7 @@ def training(model_para_args,
                             iter_start.elapsed_time(iter_end),
                             testing_iterations,
                             scene,
-                            render,
+                            render_for_report,
                             pipeline_para_args,
                             model_para_args
                             )
@@ -188,6 +231,9 @@ def training(model_para_args,
 
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none=True)
+                if triplane_optimizer is not None:
+                    triplane_optimizer.step()
+                    triplane_optimizer.zero_grad(set_to_none=True)
 
             if (iteration in checkpoint_iterations):
                 chkpnt_path = os.path.join(scene.model_path, f"chkpnt{str(iteration)}.pth")
@@ -195,6 +241,16 @@ def training(model_para_args,
                 print("\n[ITER {}] Saving Checkpoint in Path: {}".format(iteration, chkpnt_path))
 
                 torch.save((gaussians.capture(), iteration), chkpnt_path)
+                if triplane_runtime is not None:
+                    tri_path = os.path.join(scene.model_path, f"triplane_persistent_{str(iteration)}.pth")
+                    torch.save(
+                        {
+                            "iteration": iteration,
+                            "state_dict": triplane_runtime["model"].state_dict(),
+                        },
+                        tri_path,
+                    )
+                    print("[ITER {}] Saving TriPlane Persistent in Path: {}".format(iteration, tri_path))
 
 
 
